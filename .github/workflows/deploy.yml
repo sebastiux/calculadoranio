@@ -2,7 +2,8 @@ name: Deploy a GitHub Pages
 
 on:
   push:
-    branches: [main]
+    # la rama claude/* es la rama por defecto del repo mientras no se cambie a main
+    branches: [main, claude/festive-faraday-45aj7w]
   workflow_dispatch:
 
 permissions:
