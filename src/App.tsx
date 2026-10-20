@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CONFIG_DEFAULT, clonar, type Config } from './lib/config'
 import { calcular } from './lib/engine'
 import { cargarConfig, descargarCSV, enlaceCompartir, guardarConfig } from './lib/storage'
-import { fMXN, fPct } from './lib/format'
+import { fMXN, fMXN2, fPct } from './lib/format'
+import type { Resultado } from './lib/engine'
 import { Boton } from './components/ui'
 import { PanelGeneral } from './components/PanelGeneral'
 import { TabResumen } from './components/TabResumen'
@@ -79,7 +80,6 @@ export default function App() {
   }
 
   const props = { cfg, r, actualizar }
-  const utilidad = r.fiscal.utilidadNetaMxn
 
   return (
     <div className="min-h-screen">
@@ -93,12 +93,6 @@ export default function App() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="hidden text-xs text-muted md:inline">
-              Utilidad neta anual{' '}
-              <strong className={`num ${utilidad >= 0 ? 'text-good' : 'text-bad'}`}>{fMXN(utilidad)}</strong>
-              <span className="mx-1">·</span>
-              margen <strong className="num">{fPct(r.fiscal.margenNetoPct)}</strong>
-            </span>
             <Boton onClick={compartir}>{copiado ? '¡Enlace copiado!' : 'Compartir'}</Boton>
             <Boton onClick={exportar}>CSV</Boton>
             <Boton variante="fantasma" onClick={reiniciar}>
@@ -106,10 +100,11 @@ export default function App() {
             </Boton>
           </div>
         </div>
+        <BarraResultados r={r} margenObjetivo={cfg.margenObjetivoPct} mesesLicencia={cfg.ventas.mesesLicencia} />
       </header>
 
       <div className="mx-auto grid max-w-[1500px] gap-4 px-4 py-4 lg:grid-cols-[340px_1fr]">
-        <aside className="space-y-3 lg:sticky lg:top-[72px] lg:max-h-[calc(100vh-88px)] lg:overflow-y-auto lg:pb-4">
+        <aside className="space-y-3 lg:sticky lg:top-[132px] lg:max-h-[calc(100vh-148px)] lg:overflow-y-auto lg:pb-4">
           <PanelGeneral {...props} />
         </aside>
 
@@ -139,6 +134,41 @@ export default function App() {
       <footer className="mx-auto max-w-[1500px] px-4 pb-8 text-xs text-muted">
         Precios xAI y Railway vigentes a octubre 2026 · tarifas ISR 2024-2025. Todos los cálculos son estimados; valida con tus facturas y tu contador.
       </footer>
+    </div>
+  )
+}
+
+function BarraResultados({ r, margenObjetivo, mesesLicencia }: { r: Resultado; margenObjetivo: number; mesesLicencia: number }) {
+  const neta = r.fiscal.utilidadNetaMxn
+  const u = r.unitario
+  const items = [
+    {
+      etiqueta: 'Utilidad neta anual',
+      valor: fMXN(neta),
+      sub: `margen ${fPct(r.fiscal.margenNetoPct)}`,
+      clase: neta >= 0 ? (r.fiscal.margenNetoPct >= margenObjetivo ? 'text-good' : 'text-warn') : 'text-bad',
+    },
+    { etiqueta: 'Costo unitario / alumno', valor: fMXN2(u.totalPorAlumno), sub: `al año · ${fMXN2(u.totalPorAlumno / Math.max(1, mesesLicencia))} por mes de uso` },
+    { etiqueta: 'Directo / alumno', valor: fMXN2(u.directoPorAlumno), sub: 'IA + Railway variable + otros' },
+    { etiqueta: 'Indirecto / alumno', valor: fMXN2(u.indirectoPorAlumno), sub: 'estructura repartida' },
+    {
+      etiqueta: 'Precio − costo',
+      valor: fMXN2(u.utilidadPorAlumno),
+      sub: `precio ${fMXN(u.ingresoPorAlumno)}`,
+      clase: u.utilidadPorAlumno >= 0 ? 'text-good' : 'text-bad',
+    },
+  ]
+  return (
+    <div className="border-t border-line">
+      <div className="mx-auto flex max-w-[1500px] gap-x-6 gap-y-1 overflow-x-auto px-4 py-2">
+        {items.map((i) => (
+          <div key={i.etiqueta} className="shrink-0">
+            <div className="text-[11px] text-muted">{i.etiqueta}</div>
+            <div className={`num text-sm font-semibold sm:text-base ${i.clase ?? ''}`}>{i.valor}</div>
+            <div className="text-[10px] text-muted">{i.sub}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

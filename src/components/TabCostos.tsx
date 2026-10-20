@@ -11,8 +11,8 @@ export function TabCostos({ cfg, r, actualizar }: PropsTab) {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Resumen titulo="Directos" monto={r.totales.directoMxn} total={r.totales.totalMxn} texto="Crecen con cada alumno: IA, consumo de Railway, comisiones." tono="directo" />
-        <Resumen titulo="Indirectos" monto={r.totales.indirectoMxn} total={r.totales.totalMxn} texto="Estructura que pagas aunque no vendas: equipo, plan base, herramientas." tono="indirecto" />
+        <Resumen titulo="Directos" monto={r.totales.directoMxn} total={r.totales.totalMxn} texto="Crecen con cada alumno: IA y consumo de Railway por usuario." tono="directo" />
+        <Resumen titulo="Indirectos" monto={r.totales.indirectoMxn} total={r.totales.totalMxn} texto="Estructura que pagas aunque no vendas: equipo, ambientes de Railway, herramientas." tono="indirecto" />
         <div className="rounded-xl border border-line bg-panel p-4">
           <div className="text-xs text-muted">Total anual</div>
           <div className="num mt-1 text-2xl font-semibold">{fMXN(r.totales.totalMxn)}</div>
@@ -92,7 +92,7 @@ export function TabCostos({ cfg, r, actualizar }: PropsTab) {
         }
       >
         <p className="mb-3 text-xs text-muted">
-          IA, Railway variable y pasarela se calculan solos. Agrega aquí lo demás que crece con cada alumno: materiales, SMS/correo transaccional, soporte por ticket, comisión de vendedores…
+          La IA y la parte variable de Railway se calculan solas. Agrega aquí lo demás que crece con cada alumno: materiales, SMS/correo transaccional, soporte por ticket, comisión de vendedores…
         </p>
         <div className="space-y-2">
           {cfg.directos.map((fila, i) => (

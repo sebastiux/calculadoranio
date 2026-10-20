@@ -1,10 +1,13 @@
-// Modelo de costo de Railway basado en recursos medidos (no en un costo fijo por cada 100 usuarios).
+// Costo de Railway. Dos modos:
+//  - aproximado: parte de tu factura real (ambiente de pruebas) y la escala con usuarios y réplicas.
+//  - detallado: especificación por servicio (CPU por request, RAM por usuario simultáneo, egress, volumen).
+// En ambos se suma el ambiente de pruebas, que sigue corriendo aunque no haya alumnos.
 // Precios: docs.railway.com/pricing/plans
 //   vCPU  $20 / vCPU-mes  ($0.000463 / vCPU-min)
 //   RAM   $10 / GB-mes    ($0.000231 / GB-min)
 //   Egress $0.05 / GB (la red privada entre servicios es gratis)
 //   Volumen $0.15 / GB-mes
-// Facturación: cuota del plan + max(0, uso - crédito incluido).
+// Facturación del workspace: cuota del plan + max(0, uso - crédito incluido).
 
 export const PRECIOS_RAILWAY = {
   vcpuMes: 20,
@@ -19,10 +22,12 @@ export const PLANES_RAILWAY = {
 } as const
 
 export type PlanRailway = keyof typeof PLANES_RAILWAY
+export type ModoRailway = 'aproximado' | 'detallado'
 
 const SEGUNDOS_MES = 30 * 24 * 3600
 const HORAS_MES = 30 * 24
 const KB_POR_GB = 1024 * 1024
+const MB_POR_GB = 1024
 
 export interface ServicioRailway {
   id: string
@@ -63,6 +68,39 @@ export interface TraficoRailway {
   mesesHistorial: number
 }
 
+/** Factura mensual real del ambiente de pruebas por recurso (USD), del panel "Project usage". */
+export interface ConsumoMedido {
+  cpuUsd: number
+  ramUsd: number
+  egressUsd: number
+  volumenUsd: number
+  backupUsd: number
+}
+
+export interface AmbientePruebas extends ConsumoMedido {
+  /** El ambiente de pruebas sigue corriendo en paralelo a producción. */
+  incluir: boolean
+}
+
+export interface ConfigAproximada {
+  /** Producción en reposo = consumo de pruebas × este factor. */
+  factorProduccion: number
+  /** Imágenes (servicios) de frontend que se replican cuando sube la concurrencia. */
+  imagenesFrontend: number
+  /** USD al mes de cada réplica extra de una imagen de frontend. */
+  costoReplicaUsd: number
+  /** Usuarios simultáneos que aguanta una réplica de cada imagen. */
+  usuariosPorReplica: number
+  /** MB de RAM por usuario simultáneo; Node y Redis retienen el pico todo el mes. */
+  ramMbPorSimultaneo: number
+  /** vCPU que consumen 100 usuarios simultáneos mientras están conectados. */
+  vcpuPor100Simultaneos: number
+  /** MB que descarga cada sesión diaria (assets, API, sockets). */
+  egressMbPorSesion: number
+  /** MB guardados por usuario registrado (MySQL + Redis + backups). */
+  volumenMbPorUsuario: number
+}
+
 export interface CalibracionRailway {
   activa: boolean
   /** Usuarios activos en el mes medido. */
@@ -77,7 +115,10 @@ export interface CalibracionRailway {
 }
 
 export interface ConfigRailway {
+  modo: ModoRailway
   plan: PlanRailway
+  pruebas: AmbientePruebas
+  aprox: ConfigAproximada
   servicios: ServicioRailway[]
   trafico: TraficoRailway
   calibracion: CalibracionRailway
@@ -113,32 +154,76 @@ export interface ServicioCalculado {
   totalUsd: number
 }
 
-export interface MesRailway {
-  servicios: ServicioCalculado[]
-  concurrentes: number
-  usoUsd: number
+export interface Recursos {
   cpuUsd: number
   ramUsd: number
   egressUsd: number
   volumenUsd: number
+  backupUsd: number
+}
+
+export interface MesRailway extends Recursos {
+  modo: ModoRailway
+  /** Solo en modo detallado. */
+  servicios: ServicioCalculado[]
+  concurrentes: number
+  /** Réplicas por imagen de frontend (modo aproximado). */
+  replicasPorImagen: number
+  pruebasUsd: number
+  produccionUsd: number
+  usoUsd: number
   cuotaUsd: number
   creditoUsd: number
   facturaUsd: number
 }
 
-export function calcularMesRailway(cfg: ConfigRailway, demanda: DemandaRailway, factores: Factores = FACTORES_NEUTROS): MesRailway {
+export function totalMedido(c: ConsumoMedido): number {
+  return c.cpuUsd + c.ramUsd + c.egressUsd + c.volumenUsd + c.backupUsd
+}
+
+/** Usuarios simultáneos en la ventana de actividad (ley de Little). */
+export function concurrentes(t: TraficoRailway, usuariosActivos: number): number {
+  const dau = usuariosActivos * (t.dauPct / 100)
+  return usuariosActivos > 0 ? (dau * t.minutosSesion) / (Math.max(1, t.horasActividadDia) * 60) : 0
+}
+
+/** Función aproximada de producción: base medida + usuarios + réplicas escalonadas. */
+export function produccionAproximada(cfg: ConfigRailway, demanda: DemandaRailway): Recursos & { replicasPorImagen: number; concurrentes: number } {
+  const a = cfg.aprox
+  const p = cfg.pruebas
+  const f = Math.max(0, a.factorProduccion)
+  const sim = concurrentes(cfg.trafico, demanda.usuariosActivos)
+  const replicasPorImagen = Math.max(1, Math.ceil(sim / Math.max(1, a.usuariosPorReplica)))
+  const replicasExtraUsd = (replicasPorImagen - 1) * Math.max(0, a.imagenesFrontend) * a.costoReplicaUsd
+  const t = cfg.trafico
+  const fraccionActiva = Math.min(1, (t.diasActivosMes * Math.max(1, t.horasActividadDia)) / HORAS_MES)
+  const sesionesMes = demanda.usuariosActivos * (t.dauPct / 100) * t.diasActivosMes
+
+  return {
+    concurrentes: sim,
+    replicasPorImagen,
+    // el CPU solo se cobra mientras hay gente conectada
+    cpuUsd: p.cpuUsd * f + (sim / 100) * a.vcpuPor100Simultaneos * fraccionActiva * PRECIOS_RAILWAY.vcpuMes,
+    // las réplicas extra se cobran casi todo en RAM (cada proceso Node carga su propio heap)
+    ramUsd: p.ramUsd * f + ((sim * a.ramMbPorSimultaneo) / MB_POR_GB) * PRECIOS_RAILWAY.ramGbMes + replicasExtraUsd,
+    egressUsd: p.egressUsd * f + ((sesionesMes * a.egressMbPorSesion) / MB_POR_GB) * PRECIOS_RAILWAY.egressGb,
+    volumenUsd: p.volumenUsd * f + (demanda.usuariosRegistrados * a.volumenMbPorUsuario / MB_POR_GB) * PRECIOS_RAILWAY.volumenGbMes,
+    backupUsd: p.backupUsd * f,
+  }
+}
+
+/** Especificación por servicio (modo detallado). */
+export function produccionDetallada(cfg: ConfigRailway, demanda: DemandaRailway, factores: Factores = FACTORES_NEUTROS) {
   const t = cfg.trafico
   const dau = demanda.usuariosActivos * (t.dauPct / 100)
-  const ventanaHoras = Math.max(1, t.horasActividadDia)
-  // Ley de Little: usuarios simultáneos = llegadas por minuto × duración de la sesión
-  const concurrentes = demanda.usuariosActivos > 0 ? (dau * t.minutosSesion) / (ventanaHoras * 60) : 0
-  const fraccionActiva = Math.min(1, (t.diasActivosMes * ventanaHoras) / HORAS_MES)
+  const sim = concurrentes(t, demanda.usuariosActivos)
+  const fraccionActiva = Math.min(1, (t.diasActivosMes * Math.max(1, t.horasActividadDia)) / HORAS_MES)
   const interaccionesHistorial = demanda.interaccionesIA * Math.max(1, t.mesesHistorial)
 
   const servicios = cfg.servicios.map((s): ServicioCalculado => {
     const requestsMes = dau * t.diasActivosMes * s.requestsPorUsuarioDia + demanda.interaccionesIA * s.requestsPorInteraccionIA
     const vcpu = (s.replicas * s.cpuBase + (requestsMes * s.cpuMsPorRequest) / 1000 / SEGUNDOS_MES) * factores.cpu
-    const ramGb = (s.replicas * s.ramBaseGb + ((s.ramMbPorConcurrente / 1024) * concurrentes * fraccionActiva)) * factores.ram
+    const ramGb = (s.replicas * s.ramBaseGb + (s.ramMbPorConcurrente / 1024) * sim * fraccionActiva) * factores.ram
     const egressGb = ((requestsMes * s.egressKbPorRequest) / KB_POR_GB) * factores.egress
     const volumenGb =
       (s.volumenBaseGb +
@@ -150,52 +235,72 @@ export function calcularMesRailway(cfg: ConfigRailway, demanda: DemandaRailway, 
     const ramUsd = ramGb * PRECIOS_RAILWAY.ramGbMes
     const egressUsd = egressGb * PRECIOS_RAILWAY.egressGb
     const volumenUsd = volumenGb * PRECIOS_RAILWAY.volumenGbMes
-    return {
-      id: s.id,
-      nombre: s.nombre,
-      requestsMes,
-      vcpu,
-      ramGb,
-      egressGb,
-      volumenGb,
-      cpuUsd,
-      ramUsd,
-      egressUsd,
-      volumenUsd,
-      totalUsd: cpuUsd + ramUsd + egressUsd + volumenUsd,
-    }
+    return { id: s.id, nombre: s.nombre, requestsMes, vcpu, ramGb, egressGb, volumenGb, cpuUsd, ramUsd, egressUsd, volumenUsd, totalUsd: cpuUsd + ramUsd + egressUsd + volumenUsd }
   })
 
-  const suma = (k: 'cpuUsd' | 'ramUsd' | 'egressUsd' | 'volumenUsd') => servicios.reduce((a, s) => a + s[k], 0)
-  const cpuUsd = suma('cpuUsd')
-  const ramUsd = suma('ramUsd')
-  const egressUsd = suma('egressUsd')
-  const volumenUsd = suma('volumenUsd')
-  const usoUsd = cpuUsd + ramUsd + egressUsd + volumenUsd
+  const suma = (k: 'cpuUsd' | 'ramUsd' | 'egressUsd' | 'volumenUsd') => servicios.reduce((acc, s) => acc + s[k], 0)
+  return { servicios, concurrentes: sim, cpuUsd: suma('cpuUsd'), ramUsd: suma('ramUsd'), egressUsd: suma('egressUsd'), volumenUsd: suma('volumenUsd'), backupUsd: 0 }
+}
+
+export function calcularMesRailway(cfg: ConfigRailway, demanda: DemandaRailway, factores: Factores = FACTORES_NEUTROS): MesRailway {
+  const p = cfg.pruebas
+  const pruebas: Recursos = p.incluir
+    ? { cpuUsd: p.cpuUsd, ramUsd: p.ramUsd, egressUsd: p.egressUsd, volumenUsd: p.volumenUsd, backupUsd: p.backupUsd }
+    : { cpuUsd: 0, ramUsd: 0, egressUsd: 0, volumenUsd: 0, backupUsd: 0 }
+
+  let prod: Recursos
+  let servicios: ServicioCalculado[] = []
+  let sim: number
+  let replicasPorImagen = 1
+  if (cfg.modo === 'aproximado') {
+    const a = produccionAproximada(cfg, demanda)
+    prod = a
+    sim = a.concurrentes
+    replicasPorImagen = a.replicasPorImagen
+  } else {
+    const d = produccionDetallada(cfg, demanda, factores)
+    prod = d
+    servicios = d.servicios
+    sim = d.concurrentes
+  }
+
+  const r = (k: keyof Recursos) => pruebas[k] + prod[k]
+  const pruebasUsd = sumaRecursos(pruebas)
+  const produccionUsd = sumaRecursos(prod)
+  const usoUsd = pruebasUsd + produccionUsd
   const plan = PLANES_RAILWAY[cfg.plan]
 
   return {
+    modo: cfg.modo,
     servicios,
-    concurrentes,
+    concurrentes: sim,
+    replicasPorImagen,
+    cpuUsd: r('cpuUsd'),
+    ramUsd: r('ramUsd'),
+    egressUsd: r('egressUsd'),
+    volumenUsd: r('volumenUsd'),
+    backupUsd: r('backupUsd'),
+    pruebasUsd,
+    produccionUsd,
     usoUsd,
-    cpuUsd,
-    ramUsd,
-    egressUsd,
-    volumenUsd,
     cuotaUsd: plan.cuota,
     creditoUsd: plan.credito,
     facturaUsd: plan.cuota + Math.max(0, usoUsd - plan.credito),
   }
 }
 
+function sumaRecursos(r: Recursos): number {
+  return r.cpuUsd + r.ramUsd + r.egressUsd + r.volumenUsd + r.backupUsd
+}
+
 /**
- * Compara la factura real con lo que predice el modelo para la misma demanda
+ * Modo detallado: compara la factura real con lo que predice la especificación para la misma demanda
  * y devuelve un multiplicador por recurso. Así el modelo queda anclado a tu consumo real.
  */
 export function factoresCalibracion(cfg: ConfigRailway): Factores {
   const c = cfg.calibracion
-  if (!c.activa) return FACTORES_NEUTROS
-  const modelo = calcularMesRailway(cfg, {
+  if (!c.activa || cfg.modo !== 'detallado') return FACTORES_NEUTROS
+  const modelo = produccionDetallada(cfg, {
     usuariosActivos: c.usuariosActivos,
     usuariosRegistrados: c.usuariosActivos,
     interaccionesIA: c.interaccionesIA,

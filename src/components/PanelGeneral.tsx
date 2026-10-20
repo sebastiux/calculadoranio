@@ -75,20 +75,6 @@ export function PanelGeneral({ cfg, r, actualizar }: PropsTab) {
         <CampoNumero etiqueta="Margen neto objetivo" sufijo="%" valor={cfg.margenObjetivoPct} min={0} max={100} onChange={(n) => actualizar((d) => void (d.margenObjetivoPct = n))} />
       </Seccion>
 
-      <Seccion titulo="Pasarela de pago">
-        <div className="grid grid-cols-2 gap-3">
-          <CampoNumero etiqueta="Comisión" sufijo="%" paso={0.1} valor={cfg.pasarela.pct} min={0} onChange={(n) => actualizar((d) => void (d.pasarela.pct = n))} />
-          <CampoNumero etiqueta="Cargo fijo por cobro" prefijo="$" valor={cfg.pasarela.fijaMxn} min={0} onChange={(n) => actualizar((d) => void (d.pasarela.fijaMxn = n))} />
-        </div>
-        <CampoNumero
-          etiqueta="Alumnos por cobro"
-          valor={cfg.pasarela.alumnosPorPago}
-          min={1}
-          onChange={(n) => actualizar((d) => void (d.pasarela.alumnosPorPago = Math.max(1, Math.round(n))))}
-          ayuda="1 = cada familia paga con tarjeta. Si una escuela paga 300 licencias en un solo cobro, pon 300. Con transferencia SPEI pon comisión 0."
-        />
-      </Seccion>
-
       <Seccion titulo="Inversión inicial" extra={<span className="num text-xs text-muted">{fMXN(inversionTotal)}</span>}>
         {cfg.inversion.map((inv, i) => (
           <div key={inv.id} className="flex items-center gap-2">

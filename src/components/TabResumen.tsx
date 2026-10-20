@@ -9,7 +9,6 @@ import type { TabId } from '../App'
 const COLOR_GRUPO: Record<Grupo, string> = {
   IA: 'var(--serie-1)',
   Railway: 'var(--serie-2)',
-  Pasarela: 'var(--serie-3)',
   'Otros directos': 'var(--serie-3)',
   Estructura: 'var(--serie-4)',
   Nómina: 'var(--serie-5)',

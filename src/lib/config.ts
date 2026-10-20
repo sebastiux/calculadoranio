@@ -56,11 +56,6 @@ export interface Config {
     maestro: PerfilIA
   }
   railway: ConfigRailway
-  pasarela: {
-    pct: number
-    fijaMxn: number
-    alumnosPorPago: number
-  }
   directos: FilaDirecta[]
   indirectos: FilaIndirecta[]
   cargaSocialPct: number
@@ -101,29 +96,49 @@ export const CONFIG_DEFAULT: Config = {
     maestro: { pctActivos: 90, interaccionesMes: 200, tokensEntrada: 5000, pctCache: 50, tokensSalida: 1500, tokensRazonamiento: 400, topeUsd: 2.5 },
   },
   railway: {
-    plan: 'hobby',
+    modo: 'aproximado',
+    plan: 'pro',
+    // ambiente "testing" (niodev): $17.74 de uso a la fecha → $21.36 estimados al mes, repartidos por recurso
+    pruebas: { incluir: true, cpuUsd: 0.52, ramUsd: 20.2, egressUsd: 0.06, volumenUsd: 0.45, backupUsd: 0.13 },
+    aprox: {
+      factorProduccion: 1,
+      imagenesFrontend: 3,
+      costoReplicaUsd: 4.5,
+      usuariosPorReplica: 150,
+      ramMbPorSimultaneo: 64,
+      vcpuPor100Simultaneos: 1.5,
+      egressMbPorSesion: 3,
+      volumenMbPorUsuario: 5,
+    },
     trafico: { dauPct: 60, diasActivosMes: 22, horasActividadDia: 8, minutosSesion: 25, mesesHistorial: 6 },
-    calibracion: { activa: false, usuariosActivos: 100, interaccionesIA: 12000, cpuUsd: 0.6, ramUsd: 5.6, egressUsd: 0.05, volumenUsd: 0.2 },
+    calibracion: { activa: false, usuariosActivos: 100, interaccionesIA: 12000, cpuUsd: 0.52, ramUsd: 20.2, egressUsd: 0.06, volumenUsd: 0.45 },
     servicios: [
       {
-        id: 'mysql', nombre: 'MySQL', replicas: 1, cpuBase: 0.02, ramBaseGb: 0.45, cpuMsPorRequest: 2, ramMbPorConcurrente: 0.5,
-        requestsPorUsuarioDia: 30, requestsPorInteraccionIA: 3, egressKbPorRequest: 0, volumenBaseGb: 0.5, volumenKbPorUsuario: 20, volumenKbPorInteraccion: 4,
+        id: 'mysql', nombre: 'MySQL', replicas: 1, cpuBase: 0.006, ramBaseGb: 0.5, cpuMsPorRequest: 2, ramMbPorConcurrente: 0.5,
+        requestsPorUsuarioDia: 30, requestsPorInteraccionIA: 3, egressKbPorRequest: 0, volumenBaseGb: 0.4, volumenKbPorUsuario: 20, volumenKbPorInteraccion: 4,
       },
       {
-        id: 'grok', nombre: 'Servicio Grok (API IA)', replicas: 1, cpuBase: 0.01, ramBaseGb: 0.06, cpuMsPorRequest: 15, ramMbPorConcurrente: 2,
-        requestsPorUsuarioDia: 0, requestsPorInteraccionIA: 1, egressKbPorRequest: 6, volumenBaseGb: 0, volumenKbPorUsuario: 0, volumenKbPorInteraccion: 0,
+        id: 'redis-cache', nombre: 'RedisGeneralCache', replicas: 1, cpuBase: 0.002, ramBaseGb: 0.08, cpuMsPorRequest: 0.3, ramMbPorConcurrente: 0.2,
+        requestsPorUsuarioDia: 20, requestsPorInteraccionIA: 1, egressKbPorRequest: 0, volumenBaseGb: 0.15, volumenKbPorUsuario: 2, volumenKbPorInteraccion: 0,
       },
       {
-        id: 'auth', nombre: 'Servicio JWT / Auth', replicas: 1, cpuBase: 0.005, ramBaseGb: 0.05, cpuMsPorRequest: 5, ramMbPorConcurrente: 0.5,
-        requestsPorUsuarioDia: 20, requestsPorInteraccionIA: 0, egressKbPorRequest: 1, volumenBaseGb: 0, volumenKbPorUsuario: 0, volumenKbPorInteraccion: 0,
+        id: 'redis-game', nombre: 'RedisNioGame', replicas: 1, cpuBase: 0.002, ramBaseGb: 0.08, cpuMsPorRequest: 0.3, ramMbPorConcurrente: 0.5,
+        requestsPorUsuarioDia: 10, requestsPorInteraccionIA: 0, egressKbPorRequest: 0, volumenBaseGb: 0.15, volumenKbPorUsuario: 1, volumenKbPorInteraccion: 0,
       },
       {
-        id: 'web', nombre: 'Frontend / otros', replicas: 1, cpuBase: 0.001, ramBaseGb: 0.01, cpuMsPorRequest: 1, ramMbPorConcurrente: 0,
+        id: 'backendtokens', nombre: 'backendtokens (API + Grok)', replicas: 1, cpuBase: 0.006, ramBaseGb: 0.4, cpuMsPorRequest: 15, ramMbPorConcurrente: 2,
+        requestsPorUsuarioDia: 20, requestsPorInteraccionIA: 1, egressKbPorRequest: 6, volumenBaseGb: 0, volumenKbPorUsuario: 0, volumenKbPorInteraccion: 0,
+      },
+      {
+        id: 'frontendtokens', nombre: 'frontendtokens', replicas: 1, cpuBase: 0.005, ramBaseGb: 0.45, cpuMsPorRequest: 3, ramMbPorConcurrente: 1,
+        requestsPorUsuarioDia: 5, requestsPorInteraccionIA: 0, egressKbPorRequest: 150, volumenBaseGb: 0, volumenKbPorUsuario: 0, volumenKbPorInteraccion: 0,
+      },
+      {
+        id: 'webapp', nombre: 'niolearningwebapp', replicas: 1, cpuBase: 0.006, ramBaseGb: 0.5, cpuMsPorRequest: 3, ramMbPorConcurrente: 1,
         requestsPorUsuarioDia: 5, requestsPorInteraccionIA: 0, egressKbPorRequest: 300, volumenBaseGb: 0, volumenKbPorUsuario: 0, volumenKbPorInteraccion: 0,
       },
     ],
   },
-  pasarela: { pct: 3.6, fijaMxn: 3, alumnosPorPago: 1 },
   directos: [
     { id: 'soporte-usuario', nombre: 'Soporte por licencia (tickets, onboarding)', monto: 0, moneda: 'MXN', base: 'licencia', iva: false },
   ],

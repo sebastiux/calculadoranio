@@ -30,24 +30,47 @@ describe('grok', () => {
 })
 
 describe('railway', () => {
-  it('sin usuarios solo cobra los servicios en reposo y respeta la cuota del plan', () => {
-    const r = calcularMesRailway(CONFIG_DEFAULT.railway, { usuariosActivos: 0, usuariosRegistrados: 0, interaccionesIA: 0 })
-    // 0.036 vCPU × 20 + 0.57 GB × 10 + 0.5 GB × 0.15 = 0.72 + 5.70 + 0.075
-    expect(r.usoUsd).toBeCloseTo(6.495, 3)
-    expect(r.facturaUsd).toBeCloseTo(6.495, 3)
-    const pro = calcularMesRailway({ ...CONFIG_DEFAULT.railway, plan: 'pro' }, { usuariosActivos: 0, usuariosRegistrados: 0, interaccionesIA: 0 })
-    expect(pro.facturaUsd).toBe(20)
+  const vacio = { usuariosActivos: 0, usuariosRegistrados: 0, interaccionesIA: 0 }
+
+  it('sin alumnos cobra pruebas + producción en reposo con la factura real como base', () => {
+    const r = calcularMesRailway(CONFIG_DEFAULT.railway, vacio)
+    expect(r.pruebasUsd).toBeCloseTo(21.36, 2)
+    expect(r.produccionUsd).toBeCloseTo(21.36, 2)
+    expect(r.facturaUsd).toBeCloseTo(42.72, 2)
+    const sinPruebas = calcularMesRailway({ ...CONFIG_DEFAULT.railway, pruebas: { ...CONFIG_DEFAULT.railway.pruebas, incluir: false } }, vacio)
+    expect(sinPruebas.facturaUsd).toBeCloseTo(21.36, 2)
   })
 
-  it('el costo crece con los usuarios', () => {
-    const poco = calcularMesRailway(CONFIG_DEFAULT.railway, { usuariosActivos: 100, usuariosRegistrados: 100, interaccionesIA: 15_000 })
-    const mucho = calcularMesRailway(CONFIG_DEFAULT.railway, { usuariosActivos: 10_000, usuariosRegistrados: 10_000, interaccionesIA: 1_500_000 })
+  it('la función aproximada crece por usuario y agrega réplicas escalonadas del frontend', () => {
+    const cfg = CONFIG_DEFAULT.railway
+    const base = calcularMesRailway(cfg, vacio).usoUsd
+    const mil = calcularMesRailway(cfg, { usuariosActivos: 1000, usuariosRegistrados: 1000, interaccionesIA: 0 })
+    // 600 diarios × 25 min ÷ 480 min = 31.25 simultáneos; 600 × 22 = 13,200 sesiones; clases 22 × 8 h de 720 h
+    const sim = 31.25
+    const esperado =
+      ((sim * 64) / 1024) * 10 + (sim / 100) * 1.5 * ((22 * 8) / 720) * 20 + ((13_200 * 3) / 1024) * 0.05 + ((1000 * 5) / 1024) * 0.15
+    expect(mil.usoUsd - base).toBeCloseTo(esperado, 6)
+    expect(mil.replicasPorImagen).toBe(1)
+
+    // 20,000 activos → 625 simultáneos → 5 réplicas por imagen → 4 × 3 × $4.5 extra
+    const muchos = calcularMesRailway(cfg, { usuariosActivos: 20_000, usuariosRegistrados: 20_000, interaccionesIA: 0 })
+    expect(muchos.concurrentes).toBeCloseTo(625, 6)
+    expect(muchos.replicasPorImagen).toBe(5)
+  })
+
+  it('modo detallado conserva la especificación por servicio y crece con los usuarios', () => {
+    const cfg = { ...CONFIG_DEFAULT.railway, modo: 'detallado' as const }
+    const poco = calcularMesRailway(cfg, { usuariosActivos: 100, usuariosRegistrados: 100, interaccionesIA: 15_000 })
+    const mucho = calcularMesRailway(cfg, { usuariosActivos: 10_000, usuariosRegistrados: 10_000, interaccionesIA: 1_500_000 })
+    expect(poco.servicios).toHaveLength(cfg.servicios.length)
     expect(mucho.usoUsd).toBeGreaterThan(poco.usoUsd)
     expect(mucho.egressUsd).toBeGreaterThan(poco.egressUsd * 50)
   })
 
-  it('la calibración reproduce exactamente la factura real medida', () => {
+  it('la calibración (modo detallado) reproduce exactamente la factura medida', () => {
     const cfg = clonar(CONFIG_DEFAULT.railway)
+    cfg.modo = 'detallado'
+    cfg.pruebas.incluir = false
     cfg.calibracion = { activa: true, usuariosActivos: 250, interaccionesIA: 30_000, cpuUsd: 1.5, ramUsd: 9, egressUsd: 0.4, volumenUsd: 0.3 }
     const f = factoresCalibracion(cfg)
     const r = calcularMesRailway(cfg, { usuariosActivos: 250, usuariosRegistrados: 250, interaccionesIA: 30_000 }, f)
@@ -99,6 +122,12 @@ describe('motor', () => {
     const r = calcular(conAlumnos(CONFIG_DEFAULT, 5000))
     expect(r.fiscal.regimen).toBe('PF_AE')
     expect(r.fiscal.isr.isr).toBeGreaterThan(0)
+  })
+
+  it('no incluye pasarela de pagos y el costo unitario cuadra con el total', () => {
+    const r = calcular(CONFIG_DEFAULT)
+    expect(r.lineas.some((l) => /pasarela/i.test(l.concepto))).toBe(false)
+    expect(r.unitario.totalPorAlumno * r.usuarios.alumnos).toBeCloseTo(r.totales.totalMxn, 4)
   })
 
   it('normalizar tolera configuraciones viejas o incompletas', () => {

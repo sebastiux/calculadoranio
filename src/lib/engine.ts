@@ -3,7 +3,7 @@ import { MODELOS_GROK, costoIAUsuario, interaccionesEfectivas, type CostoIAUsuar
 import { calcularMesRailway, factoresCalibracion, type Factores, type MesRailway } from './railway'
 import { calcularISR, calcularIVA, REGIMENES, type Regimen, type ResultadoISR, type ResultadoIVA } from './fiscal'
 
-export type Grupo = 'IA' | 'Railway' | 'Pasarela' | 'Otros directos' | 'Estructura' | 'Nómina'
+export type Grupo = 'IA' | 'Railway' | 'Otros directos' | 'Estructura' | 'Nómina'
 
 export interface Linea {
   id: string
@@ -145,14 +145,7 @@ export function calcular(cfg: Config): Resultado {
   })
   lineas.push({
     id: 'railway-variable', concepto: 'Railway · consumo por usuarios', tipo: 'directo', grupo: 'Railway', anualMxn: railwayVariableUsd * tc, iva: cfg.fiscal.ivaRailway,
-    detalle: `CPU, RAM, egress y volumen que agregan los usuarios (${meses} meses activos)`,
-  })
-
-  const transacciones = (cfg.pasarela.alumnosPorPago > 0 ? Math.ceil(alumnos / cfg.pasarela.alumnosPorPago) : 0) + maestrosPagados
-  const comision = ingresos * (cfg.pasarela.pct / 100) + transacciones * cfg.pasarela.fijaMxn
-  lineas.push({
-    id: 'pasarela', concepto: 'Comisión pasarela de pago', tipo: 'directo', grupo: 'Pasarela', anualMxn: comision, iva: true,
-    detalle: `${cfg.pasarela.pct}% + $${cfg.pasarela.fijaMxn} × ${fmtN(transacciones)} cobros`,
+    detalle: `CPU, RAM, egress, volumen y réplicas que agregan los usuarios (${meses} meses activos)`,
   })
 
   const licenciasPagadas = alumnos + maestrosPagados
@@ -165,7 +158,7 @@ export function calcular(cfg: Config): Resultado {
   }
 
   lineas.push({
-    id: 'railway-fijo', concepto: `Railway · plan ${cfg.railway.plan === 'pro' ? 'Pro' : 'Hobby'} + servicios en reposo`, tipo: 'indirecto', grupo: 'Railway',
+    id: 'railway-fijo', concepto: `Railway · ${cfg.railway.pruebas.incluir ? 'pruebas + ' : ''}producción en reposo (plan ${cfg.railway.plan === 'pro' ? 'Pro' : 'Hobby'})`, tipo: 'indirecto', grupo: 'Railway',
     anualMxn: railwayFijoUsd * tc, iva: cfg.fiscal.ivaRailway, detalle: `$${mesVacio.facturaUsd.toFixed(2)} USD/mes × 12 meses (corre todo el año)`,
   })
 
@@ -300,7 +293,7 @@ export function escenarios(cfg: Config, puntos: number[] = PUNTOS_ESCENARIOS): E
       ingresos: r.ingresos.totalMxn,
       ia: porGrupo(['IA']),
       railway: porGrupo(['Railway']),
-      otrosDirectos: porGrupo(['Pasarela', 'Otros directos']),
+      otrosDirectos: porGrupo(['Otros directos']),
       indirectos: sumar(r.lineas.filter((l) => l.tipo === 'indirecto' && l.grupo !== 'Railway')),
       costos: r.totales.totalMxn,
       directo: r.totales.directoMxn,

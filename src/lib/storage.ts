@@ -1,6 +1,6 @@
 import { normalizar, type Config } from './config'
 
-const CLAVE = 'calculadoranio:config:v1'
+const CLAVE = 'calculadoranio:config:v2'
 
 function aBase64Url(texto: string): string {
   const bytes = new TextEncoder().encode(texto)

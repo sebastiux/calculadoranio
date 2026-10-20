@@ -9,7 +9,7 @@ import type { PropsTab } from './tipos'
 const SERIES = [
   { clave: 'ia', nombre: 'IA', color: 'var(--serie-1)' },
   { clave: 'railway', nombre: 'Railway', color: 'var(--serie-2)' },
-  { clave: 'otrosDirectos', nombre: 'Pasarela y otros', color: 'var(--serie-3)' },
+  { clave: 'otrosDirectos', nombre: 'Otros directos', color: 'var(--serie-3)' },
   { clave: 'indirectos', nombre: 'Indirectos', color: 'var(--serie-4)' },
 ] as const
 
