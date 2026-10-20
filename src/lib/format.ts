@@ -1,0 +1,16 @@
+const mxn = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
+const mxn2 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const usd4 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 4, maximumFractionDigits: 4 })
+const num = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 })
+const num2 = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 })
+const compacto = new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 })
+
+export const fMXN = (v: number) => mxn.format(v)
+export const fMXN2 = (v: number) => mxn2.format(v)
+export const fUSD = (v: number) => usd.format(v)
+export const fUSD4 = (v: number) => usd4.format(v)
+export const fNum = (v: number) => num.format(v)
+export const fNum2 = (v: number) => num2.format(v)
+export const fCompacto = (v: number) => compacto.format(v)
+export const fPct = (v: number, d = 1) => `${v.toFixed(d)}%`
