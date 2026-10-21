@@ -101,8 +101,8 @@ describe('motor', () => {
     const suma = r.lineas.reduce((a, l) => a + l.anualMxn, 0)
     expect(r.totales.directoMxn + r.totales.indirectoMxn).toBeCloseTo(suma, 6)
     expect(r.railway.fijoAnualUsd + r.railway.variableAnualUsd).toBeCloseTo(r.railway.anualUsd, 6)
-    expect(r.ingresos.totalMxn).toBe(300 * 1490)
-    expect(r.usuarios.maestrosIncluidos).toBe(60)
+    expect(r.ingresos.totalMxn).toBe(130 * 1490)
+    expect(r.usuarios.maestrosIncluidos).toBe(26)
     expect(r.usuarios.maestrosPagados).toBe(0)
   })
 
@@ -122,6 +122,14 @@ describe('motor', () => {
     const r = calcular(conAlumnos(CONFIG_DEFAULT, 5000))
     expect(r.fiscal.regimen).toBe('PF_AE')
     expect(r.fiscal.isr.isr).toBeGreaterThan(0)
+  })
+
+  it('el perfil por defecto reproduce el consumo real de xAI (5 de junio × 5, 130 alumnos)', () => {
+    const r = calcular(CONFIG_DEFAULT)
+    // real: $1.825318 × 5 × 30 días ÷ 130 alumnos = $2.106 por alumno al mes
+    expect(r.ia.alumno.costoMesUsd).toBeCloseTo((1.825318 * 5 * 30) / 130, 2)
+    expect(r.ia.maestro.costoMesUsd).toBe(0)
+    expect(r.ia.anualUsd).toBeCloseTo(1.825318 * 5 * 300, -1)
   })
 
   it('no incluye pasarela de pagos y el costo unitario cuadra con el total', () => {

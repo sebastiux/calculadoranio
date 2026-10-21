@@ -81,8 +81,8 @@ export const NIVELES_DESCUENTO: NivelDescuento[] = [
 export const CONFIG_DEFAULT: Config = {
   tipoCambio: 17.5,
   ventas: {
-    alumnos: 300,
-    maestros: 15,
+    alumnos: 130,
+    maestros: 7,
     precioAlumnoAnual: 1490,
     precioMaestroAnual: 1800,
     maestrosIncluidosPor100: 20,
@@ -92,8 +92,10 @@ export const CONFIG_DEFAULT: Config = {
   ia: {
     modeloId: MODELO_DEFAULT,
     personalizado: { short: { input: 1.25, cached: 0.2, output: 2.5 }, long: { input: 2.5, cached: 0.4, output: 5 } },
-    alumno: { pctActivos: 80, interaccionesMes: 150, tokensEntrada: 3000, pctCache: 50, tokensSalida: 600, tokensRazonamiento: 400, topeUsd: 2 },
-    maestro: { pctActivos: 90, interaccionesMes: 200, tokensEntrada: 5000, pctCache: 50, tokensSalida: 1500, tokensRazonamiento: 400, topeUsd: 2.5 },
+    // consumo real de xAI: 5 de junio de 2026 (2,413 solicitudes, 1.80 M tokens, $1.83) × 5, todos los días, entre 130 alumnos
+    // → 2,784 solicitudes de ~756 tokens a ~$0.00076 = $2.11 USD por alumno al mes. Incluye el uso de maestros.
+    alumno: { pctActivos: 100, interaccionesMes: 2784, tokensEntrada: 620, pctCache: 55, tokensSalida: 136, tokensRazonamiento: 0, topeUsd: 0 },
+    maestro: { pctActivos: 90, interaccionesMes: 0, tokensEntrada: 5000, pctCache: 50, tokensSalida: 1500, tokensRazonamiento: 400, topeUsd: 2.5 },
   },
   railway: {
     modo: 'aproximado',
